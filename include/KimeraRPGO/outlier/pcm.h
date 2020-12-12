@@ -44,6 +44,7 @@ enum class FactorType {
   NONBETWEEN_FACTORS = 4,  // not handled by PCM (may be more than 1)
 };
 
+
 // poseT can be gtsam::Pose2 or Pose3 for 3D vs 3D
 // T can be PoseWithCovariance or PoseWithDistance based on
 // If using Pcm or PcmDistance
@@ -113,6 +114,7 @@ class Pcm : public OutlierRemoval {
         new_values);  // - store latest pose in values_ (note:
                       // values_ is the optimized estimate,
                       // while trajectory is the odom estimate)
+
     // Check values to initialize a trajectory in odom_trajectories if needed
     if (new_factors.size() == 0) {
       // Done and nothing to optimize
@@ -124,11 +126,13 @@ class Pcm : public OutlierRemoval {
     gtsam::NonlinearFactorGraph loop_closure_factors;
     for (size_t i = 0; i < new_factors.size(); i++) {
       if (NULL == new_factors[i]) continue;
+
       // we first classify the current factors into the following categories:
       FactorType type = FactorType::UNCLASSIFIED;
-      // current logic: The factors handled by outlier rejection are the between
-      // factors. Between factors can be classified broadly into odometry, loop
-      // closures, and landmark observations
+
+      //* current logic: The factors handled by outlier rejection are the between
+      //* factors. Between factors can be classified broadly into odometry, loop
+      //* closures, and landmark observations
 
       // check if factor is a between factor
       if (boost::dynamic_pointer_cast<gtsam::BetweenFactor<poseT>>(
@@ -147,7 +151,7 @@ class Pcm : public OutlierRemoval {
             // re-observation: counts as loop closure
             type = FactorType::LOOP_CLOSURE;
           }
-        } else if (from_key + 1 == to_key && new_values.exists(to_key)) {
+        } else if (from_key + 1 == to_key && new_values.exists(to_key)) { //里程计factor: 相邻两个node之间
           // Note that here we assume we receive odometry incrementally
           type = FactorType::ODOMETRY;  // just regular odometry
         } else {
@@ -165,6 +169,7 @@ class Pcm : public OutlierRemoval {
         {
           updateOdom(new_factors[i], *output_values);
         } break;
+
         case FactorType::FIRST_LANDMARK_OBSERVATION:  // landmark measurement,
                                                       // initialize
         {
@@ -176,6 +181,7 @@ class Pcm : public OutlierRemoval {
           landmarks_[symb] = newMeasurement;
           total_lc_++;
         } break;
+
         case FactorType::LOOP_CLOSURE: {
           if (new_factors[i]->front() != new_factors[i]->back()) {
             // add the the loop closure factors and process them together
@@ -184,10 +190,12 @@ class Pcm : public OutlierRemoval {
             log<WARNING>("Attempting to close loop against self");
           }
         } break;
+
         case FactorType::NONBETWEEN_FACTORS: {
           nfg_special_.add(new_factors[i]);
           do_optimize = true;
         } break;
+        
         default:  // the remainders are specical loop closure cases, includes
                   // the "UNCLASSIFIED" case
         {
@@ -196,6 +204,8 @@ class Pcm : public OutlierRemoval {
         }
       }  // end switch
     }
+
+
     if (loop_closure_factors.size() > 0) {
       // update inliers
       parseAndIncrementAdjMatrix(loop_closure_factors, *output_values);
@@ -207,6 +217,8 @@ class Pcm : public OutlierRemoval {
     *output_nfg = buildGraphToOptimize();
     return do_optimize;
   }  // end reject outliers
+
+
 
   /*! \brief save the PCM data
    *  saves the distance matrix (final) and also the clique size info

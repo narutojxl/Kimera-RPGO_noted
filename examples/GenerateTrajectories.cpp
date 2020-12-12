@@ -21,9 +21,12 @@ int main(int argc, char* argv[]) {
   GraphAndValues graphNValues;
   std::string input_file = argv[1];
   std::string output_folder = argv[2];
+
   graphNValues = gtsam::load3D(input_file);
   Values all_values = *graphNValues.second;
+
   std::map<char, Values> trajectories;
+
   // Sepearate trajectories of different robots
   for (size_t i = 0; i < all_values.keys().size(); i++) {
     Symbol key = Symbol(all_values.keys()[i]);
@@ -33,6 +36,7 @@ int main(int argc, char* argv[]) {
     }
     trajectories[prefix].insert(key, all_values.at(key));
   }
+  
   // Write to csv
   for (std::pair<char, Values> traj : trajectories) {
     std::string file_name = output_folder + "/robot_" + traj.first + ".csv";

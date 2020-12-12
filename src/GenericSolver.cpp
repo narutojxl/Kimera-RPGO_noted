@@ -73,8 +73,7 @@ void GenericSolver::update(const gtsam::NonlinearFactorGraph& nfg,
         log<INFO>("Running LM");
       }
       params.diagonalDamping = true;
-      values_ =
-          gtsam::LevenbergMarquardtOptimizer(nfg_, values_, params).optimize();
+      values_ = gtsam::LevenbergMarquardtOptimizer(nfg_, values_, params).optimize();
     } else if (solver_type_ == Solver::GN) {
       gtsam::GaussNewtonParams params;
       if (debug_) {

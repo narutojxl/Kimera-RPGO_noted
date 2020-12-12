@@ -10,6 +10,8 @@ IF(APPLE)
     LINK_DIRECTORIES(/usr/local/lib)
 ENDIF()
 
+
+
 ###########################################################################
 # Find GTSAM
 find_package(GTSAM REQUIRED)
@@ -34,14 +36,20 @@ add_library(KimeraRPGO SHARED
   src/GenericSolver.cpp
   src/RobustSolver.cpp
   include/KimeraRPGO/SolverParams.h )
+
 include_directories(include)
+
 # Add source code for max clique finder
 add_subdirectory(include/KimeraRPGO/max_clique_finder)
+
 # Add source for outlier rejection stuff
 add_subdirectory(include/KimeraRPGO/outlier)
+
 # Add source for utils
 add_subdirectory(include/KimeraRPGO/utils)
+
 add_subdirectory(src/utils)
+
 
 target_include_directories(KimeraRPGO PUBLIC
   ${GTSAM_INCLUDE_DIR}
@@ -66,6 +74,7 @@ target_compile_options(KimeraRPGO
 # Define executables
 add_executable(RpgoReadG2o examples/RpgoReadG2o.cpp)
 target_link_libraries(RpgoReadG2o KimeraRPGO)
+
 add_executable(GenerateTrajectories examples/GenerateTrajectories.cpp)
 target_link_libraries(GenerateTrajectories gtsam)
 
@@ -87,6 +96,7 @@ write_basic_package_version_file(${CMAKE_CURRENT_BINARY_DIR}/KimeraRPGOConfigVer
 # Create KimeraRPGOConfig.cmake with extra info from KimeraRPGOConfig.cmake.in
 # This file is necessary to find_package the library KimeraRPGO.
 set(INSTALL_CONFIGDIR lib/cmake/KimeraRPGO)
+
 configure_package_config_file(
   ${CMAKE_CURRENT_LIST_DIR}/cmake/KimeraRPGOConfig.cmake.in
   ${CMAKE_CURRENT_BINARY_DIR}/KimeraRPGOConfig.cmake

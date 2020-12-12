@@ -87,8 +87,7 @@ void RobustSolver::optimize() {
       log<INFO>("Running LM");
     }
     params.diagonalDamping = true;
-    values_ =
-        gtsam::LevenbergMarquardtOptimizer(nfg_, values_, params).optimize();
+    values_ = gtsam::LevenbergMarquardtOptimizer(nfg_, values_, params).optimize();
   } else if (solver_type_ == Solver::GN) {
     gtsam::GaussNewtonParams params;
     if (debug_) {
@@ -117,8 +116,10 @@ void RobustSolver::update(const gtsam::NonlinearFactorGraph& factors,
                           const gtsam::Values& values) {
   bool do_optimize;
   if (outlier_removal_) {
-    do_optimize =
-        outlier_removal_->removeOutliers(factors, values, &nfg_, &values_);
+    do_optimize = outlier_removal_->removeOutliers(factors, values, &nfg_, &values_); 
+    //* nfg_：   移除outlier测量后的gtsam::NonlinearFactorGraph
+    //* values_: 移除outlier测量后的gtsam::Values
+
   } else {
     do_optimize = addAndCheckIfOptimize(factors, values);
   }
@@ -131,7 +132,7 @@ void RobustSolver::removeLastLoopClosure(char prefix_1, char prefix_2) {
   ObservationId id(prefix_1, prefix_2);
   if (outlier_removal_) {
     // removing loop closure so values should not change
-    outlier_removal_->removeLastLoopClosure(id, &nfg_);
+    outlier_removal_->removeLastLoopClosure(id, &nfg_); //*移除指定的闭环
   } else {
     removeLastFactor();
   }

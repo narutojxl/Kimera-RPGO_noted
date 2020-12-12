@@ -34,7 +34,7 @@ class RobustSolver : public GenericSolver {
 
   size_t getNumLCInliers() { return outlier_removal_->getNumLCInliers(); }
 
-  /*! \brief Update call that bypasses outlier rejection.
+  /*! \brief Update call that bypasses(绕过) outlier rejection.
    *  add new factors and values and optimize, without rejecting outliers.
    *  - nfg: new factors
    *  - values: linearization point for new variables
@@ -61,6 +61,8 @@ class RobustSolver : public GenericSolver {
 
  private:
   std::unique_ptr<OutlierRemoval> outlier_removal_;  // outlier removal method;
+  //指向基类OutlierRemoval，在构造函数中被赋值为派生类
+
 
   /*! \brief Calling the optimization
    *  Optimize the factor graph with the stroed values
