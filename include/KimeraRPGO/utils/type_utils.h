@@ -32,7 +32,7 @@ struct Measurements {
 };
 
 // struct storing the involved parties (ex robot a and robot b)
-struct ObservationId {
+struct ObservationId {//ObservationId: 机器人a与机器人a，机器人a与机器人b，机器人a与机器人c...
   char id1;
   char id2;
 
@@ -56,6 +56,8 @@ std::unique_ptr<T> make_unique(Args&&... args) {
 
 }  // namespace KimeraRPGO
 
+
+//std::hash的特化
 namespace std {
 // hash function for ObservationId
 template <>

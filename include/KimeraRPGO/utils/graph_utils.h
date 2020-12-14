@@ -20,6 +20,8 @@ int findMaxCliqueHeu(const Eigen::MatrixXd adjMatrix,
 /** \struct Trajectory
  *  \brief Structure defining a robot trajectory
  *  This helps support having multiple robots (centralized, however)
+ * @param poseT: gtsam::Pose2 or Pose3
+ * @param T: PoseWithCovariance or PoseWithDistance, If using Pcm or PcmDistance
  */
 template <class poseT, template <class> class T>
 struct Trajectory {

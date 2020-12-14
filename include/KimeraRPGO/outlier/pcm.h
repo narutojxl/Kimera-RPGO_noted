@@ -44,10 +44,11 @@ enum class FactorType {
   NONBETWEEN_FACTORS = 4,  // not handled by PCM (may be more than 1)
 };
 
-
-// poseT can be gtsam::Pose2 or Pose3 for 3D vs 3D
-// T can be PoseWithCovariance or PoseWithDistance based on
-// If using Pcm or PcmDistance
+/**
+*@param poseT: can be gtsam::Pose2 or Pose3 for 3D vs 3D
+*@param T:  can be PoseWithCovariance or PoseWithDistance based on
+*           If using Pcm or PcmDistance
+*/
 template <class poseT, template <class> class T>
 class Pcm : public OutlierRemoval {
  public:
@@ -84,6 +85,7 @@ class Pcm : public OutlierRemoval {
 
   // trajectory maping robot prefix to its keys and poses
   std::unordered_map<char, Trajectory<poseT, T>> odom_trajectories_;
+  //char: 每个机器人有个char id标志
 
   // these are the symbols corresponding to landmarks
   std::vector<char> special_symbols_;
@@ -135,8 +137,8 @@ class Pcm : public OutlierRemoval {
       //* closures, and landmark observations
 
       // check if factor is a between factor
-      if (boost::dynamic_pointer_cast<gtsam::BetweenFactor<poseT>>(
-              new_factors[i])) {
+      if (boost::dynamic_pointer_cast<gtsam::BetweenFactor<poseT>>(//之所以用boost接口是因为new_factors[i]类型是boost::shared_ptr<NonlinearFactor>
+              new_factors[i])) {//下行转换后，判断是否为nullptr
         // specifically what outlier rejection handles
         gtsam::Key from_key = new_factors[i]->front();
         gtsam::Key to_key = new_factors[i]->back();
@@ -155,7 +157,7 @@ class Pcm : public OutlierRemoval {
           // Note that here we assume we receive odometry incrementally
           type = FactorType::ODOMETRY;  // just regular odometry
         } else {
-          type = FactorType::LOOP_CLOSURE;
+          type = FactorType::LOOP_CLOSURE; //包括同一个机器人的nodes之间；不同机器人的nodes之间
         }
       } else {
         type = FactorType::NONBETWEEN_FACTORS;  // unrecognized factor, not
@@ -167,7 +169,7 @@ class Pcm : public OutlierRemoval {
       switch (type) {
         case FactorType::ODOMETRY:  // odometry, do not optimize
         {
-          updateOdom(new_factors[i], *output_values);
+          updateOdom(new_factors[i], *output_values); //把该odom factor加入到odom_trajectories_变量中
         } break;
 
         case FactorType::FIRST_LANDMARK_OBSERVATION:  // landmark measurement,
@@ -182,7 +184,7 @@ class Pcm : public OutlierRemoval {
           total_lc_++;
         } break;
 
-        case FactorType::LOOP_CLOSURE: {
+        case FactorType::LOOP_CLOSURE: {//包括同一个机器人的nodes之间；不同机器人的nodes之间；还包括re-observation landmark
           if (new_factors[i]->front() != new_factors[i]->back()) {
             // add the the loop closure factors and process them together
             loop_closure_factors.add(new_factors[i]);
@@ -195,7 +197,7 @@ class Pcm : public OutlierRemoval {
           nfg_special_.add(new_factors[i]);
           do_optimize = true;
         } break;
-        
+
         default:  // the remainders are specical loop closure cases, includes
                   // the "UNCLASSIFIED" case
         {
@@ -203,18 +205,25 @@ class Pcm : public OutlierRemoval {
           do_optimize = true;
         }
       }  // end switch
-    }
+    }//end all factors
 
 
     if (loop_closure_factors.size() > 0) {
       // update inliers
       parseAndIncrementAdjMatrix(loop_closure_factors, *output_values);
       // output values is just used to sanity check the keys
-      findInliers();
-      // Find inliers with Pairwise consistent measurement set maximization
+
+      findInliers(); //根据所有闭环的邻接矩阵和对应的马氏距离，计算哪些闭环是inlier闭环
+                     //同理计算inlier的landmark re-observation(位姿node与地图中的landmark不是第一次观测时)
+      //! Find inliers with Pairwise consistent measurement set maximization
+      // J. Mangelson, D. Dominic, R. Eustice, and R. Vasudevan. 
+      // Pairwise Consistent Measurement Set Maximization for Robust Multi-robot Map Merging. 
+      // IEEE Intl. Conf. on Robotics and Automation (ICRA), 2018.
+
       do_optimize = true;
     }
-    *output_nfg = buildGraphToOptimize();
+
+    *output_nfg = buildGraphToOptimize(); //添加inlier的闭环和inlier landmark re-observation到因子图中
     return do_optimize;
   }  // end reject outliers
 
@@ -261,6 +270,7 @@ class Pcm : public OutlierRemoval {
       std::vector<int> inliers_idx;
       size_t num_inliers =
           findMaxCliqueHeu(loop_closures_[id].adj_matrix, &inliers_idx);
+
       loop_closures_[id].consistent_factors =
           gtsam::NonlinearFactorGraph();  // reset
       // update inliers, or consistent factors, according to max clique result
@@ -276,10 +286,10 @@ class Pcm : public OutlierRemoval {
 
  protected:
   /*! \brief goes through the loop closures and updates the corresponding
-   * adjacency matrices, in preparation for max clique
+   * adjacency matrices(邻接矩阵), in preparation for max clique
    */
   void parseAndIncrementAdjMatrix(
-      const gtsam::NonlinearFactorGraph& new_factors,
+      const gtsam::NonlinearFactorGraph& new_factors, //包括同一个机器人的nodes之间；不同机器人的nodes之间；还包括re-observation landmark
       const gtsam::Values& output_values) {
     for (size_t i = 0; i < new_factors.size(); i++) {
       // iterate through the factors
@@ -291,8 +301,9 @@ class Pcm : public OutlierRemoval {
         // is good
         // * odometric consistency check (will only compare against odometry
         // - if loop fails this, we can just drop it)
+
         // extract between factor
-        gtsam::BetweenFactor<poseT> nfg_factor =
+        gtsam::BetweenFactor<poseT> nfg_factor = //该loop factor
             *boost::dynamic_pointer_cast<gtsam::BetweenFactor<poseT>>(
                 new_factors[i]);
 
@@ -306,7 +317,7 @@ class Pcm : public OutlierRemoval {
         gtsam::Symbol symbfrnt(nfg_factor.front());
         gtsam::Symbol symbback(nfg_factor.back());
         if (isSpecialSymbol(symbfrnt.chr()) ||
-            isSpecialSymbol(symbback.chr())) {
+            isSpecialSymbol(symbback.chr())) { //机器人和landmark之间的re-observation landmark factor
           // it is landmark loop closure
           gtsam::Key landmark_key =
               (isSpecialSymbol(symbfrnt.chr()) ? nfg_factor.front()
@@ -318,28 +329,40 @@ class Pcm : public OutlierRemoval {
 
           landmarks_[landmark_key].factors.add(nfg_factor);
           total_lc_++;
+
           // grow adj matrix
           incrementLandmarkAdjMatrix(landmark_key);
+
         } else {
           // It is a proper loop closures
           double odom_dist;
           bool odom_consistent = false;
-          if (symbfrnt.chr() == symbback.chr()) {
+          if (symbfrnt.chr() == symbback.chr()) {//同一个机器人的nodes之间
             odom_consistent = isOdomConsistent(nfg_factor, &odom_dist);
-          } else {
+                             //闭环检测得到的两个nodes之间的约束“减去”odom factor计算得到的约束，该delta_pose的马氏距离是否小于设置的阈值
+          } else {//不同机器人的nodes之间
             // odom consistency check only for intrarobot loop closures
             odom_consistent = true;
           }
+
           if (odom_consistent) {
             if (debug_)
               log<INFO>("loop closure between keys %1% and %2%") %
                   gtsam::DefaultKeyFormatter(nfg_factor.front()) %
                   gtsam::DefaultKeyFormatter(nfg_factor.back());
-            ObservationId obs_id(symbfrnt.chr(), symbback.chr());
+
+            ObservationId obs_id(symbfrnt.chr(), symbback.chr()); 
+            //ObservationId: 机器人a与机器人a，机器人a与机器人b，机器人a与机器人c...
+
             // detect which inter or intra robot loop closure this belongs to
-            loop_closures_[obs_id].factors.add(nfg_factor);
+            loop_closures_[obs_id].factors.add(nfg_factor); //添加2种类型
+                                                            //(1)保存一个机器人nodes之间odom consistent loop factor 
+                                                            //(2)保存不同机器人nodes之间loop factor
             total_lc_++;
-            incrementAdjMatrix(obs_id, nfg_factor);
+
+            incrementAdjMatrix(obs_id, nfg_factor); //nfg_factor刚添加到loop_closures_[obs_id].factors::factors_[]的最后一个
+            //检查每条闭环与剩余所有的闭环是否consistent，产生consistent邻接矩阵和对应的马氏距离矩阵
+
           } else {
             if (debug_)
               log<WARNING>(
@@ -347,14 +370,14 @@ class Pcm : public OutlierRemoval {
             continue;  // discontinue since loop closure not consistent with
                        // odometry
           }
-        }
+        }//end loop factor
 
       } else {
         // add as special loop closure
         // the remainders are speical loop closure cases
         nfg_special_.add(new_factors[i]);
       }
-    }
+    }//end all loop factor
   }
 
   // check if a character is a special symbol as defined in constructor
@@ -369,26 +392,30 @@ class Pcm : public OutlierRemoval {
   /* *******************************************************************************
    */
   // update the odometry: add new measurements to odometry trajectory tree
+  // 把odom factor加入到odom_trajectories_变量中
   void updateOdom(const gtsam::NonlinearFactor::shared_ptr& new_factor,
                   const gtsam::Values& output_values) {
     // here we have values for reference checking and initialization if needed
     gtsam::BetweenFactor<poseT> odom_factor =
         *boost::dynamic_pointer_cast<gtsam::BetweenFactor<poseT>>(new_factor);
+
     nfg_odom_.add(odom_factor);  // - store factor in nfg_odom_
+
     // update trajectory(compose last value with new odom value)
-    gtsam::Key new_key = odom_factor.keys().back();
+    gtsam::Key new_key = odom_factor.keys().back(); //连接odom factor的后一个node的id
 
     // extract prefix
     gtsam::Symbol sym = gtsam::Symbol(new_key);
-    char prefix = sym.chr();
+    char prefix = sym.chr(); //轨迹的id号，每个机器人轨迹有一个id号
 
     // construct pose with covariance for odometry measurement
     T<poseT> odom_delta(odom_factor);
+
     // Now get the latest pose in trajectory and compose
-    gtsam::Key prev_key = odom_factor.keys().front();
+    gtsam::Key prev_key = odom_factor.keys().front(); //连接odom factor的前一个node的id
     T<poseT> prev_pose;
     try {
-      prev_pose = odom_trajectories_[prefix].poses[prev_key];
+      prev_pose = odom_trajectories_[prefix].poses[prev_key]; //前面node的值和covariance
     } catch (...) {
       if (odom_trajectories_.find(prefix) == odom_trajectories_.end()) {
         // prefix has not been seen before, add
@@ -405,7 +432,7 @@ class Pcm : public OutlierRemoval {
     T<poseT> new_pose = prev_pose.compose(odom_delta);
 
     // add to trajectory
-    odom_trajectories_[prefix].poses[new_key] = new_pose;
+    odom_trajectories_[prefix].poses[new_key] = new_pose; //后面node的值和covariance
   }
 
   /* *******************************************************************************
@@ -449,7 +476,7 @@ class Pcm : public OutlierRemoval {
    * general interface for odometry consistency check (both PCM and distance
    * version)
    */
-  bool isOdomConsistent(const gtsam::BetweenFactor<poseT>& lc_factor,
+  bool isOdomConsistent(const gtsam::BetweenFactor<poseT>& lc_factor, //同一个机器人nodes之间的loop factor
                         double* dist) {
     // say: loop is between pose i and j
     gtsam::Key key_i = lc_factor.keys().front();  // extract the keys
@@ -463,16 +490,16 @@ class Pcm : public OutlierRemoval {
       log<WARNING>(
           "Only check for odmetry consistency for intrarobot loop closures");
     }
-    pij_odom = odom_trajectories_[symb_i.chr()].getBetween(key_i, key_j);
+    pij_odom = odom_trajectories_[symb_i.chr()].getBetween(key_i, key_j); //由odom factors构造的odom_trajectories_，得到的两个nodes之间的变换
 
     // get pij_lc = (Tij_lc, Covij_lc) from factor
-    pji_lc = T<poseT>(lc_factor).inverse();
+    pji_lc = T<poseT>(lc_factor).inverse(); //闭环检测模块计算的两个nodes之间的变换
 
     // check consistency (Tij_odom,Cov_ij_odom, Tij_lc, Cov_ij_lc)
     result = pij_odom.compose(pji_lc);
     // if (debug_) result.pose.print("odom consistency check: ");
 
-    return checkOdomConsistent(result, dist);
+    return checkOdomConsistent(result, dist); //计算result的马氏距离是否小于设置的阈值: 如果小于返回true,否则false。
   }
 
   /* *******************************************************************************
@@ -513,8 +540,8 @@ class Pcm : public OutlierRemoval {
    * general interface for loop consistency check (both PCM and distance
    * version) inputs are 2 loop closures (a,b) and (c,d), where a,b,c,d are keys
    */
-  bool areLoopsConsistent(const gtsam::BetweenFactor<poseT>& a_lcBetween_b,
-                          const gtsam::BetweenFactor<poseT>& c_lcBetween_d,
+  bool areLoopsConsistent(const gtsam::BetweenFactor<poseT>& a_lcBetween_b, //闭环检测模块得到的a, b之间的变换
+                          const gtsam::BetweenFactor<poseT>& c_lcBetween_d, //闭环检测模块得到的c, d之间的变换
                           double* dist) {
     // check if two loop closures are consistent
     // say: loop closure 1 is (a,b)
@@ -546,20 +573,20 @@ class Pcm : public OutlierRemoval {
       log<WARNING>("Attempting to get odometry between different trajectories");
     }
     T<poseT> a_odom_c =
-        odom_trajectories_[symb_a.chr()].getBetween(key_a, key_c);
+        odom_trajectories_[symb_a.chr()].getBetween(key_a, key_c); //假设a, c属于机器人a; 两个node之间的变换由odom_trajectories_查询得到
     // find odometry from d to b
     if (symb_b.chr() != symb_d.chr()) {
       log<WARNING>("Attempting to get odometry between different trajectories");
     }
     T<poseT> b_odom_d =
-        odom_trajectories_[symb_b.chr()].getBetween(key_b, key_d);
+        odom_trajectories_[symb_b.chr()].getBetween(key_b, key_d); //假设b, d属于机器人b；同上。
 
     // check that d to b pose is consistent with pose from b to d
     T<poseT> a_path_d, d_path_b, loop;
     a_path_d = a_odom_c.compose(c_lc_d);
     d_path_b = a_path_d.inverse().compose(a_lc_b);
     loop = d_path_b.compose(b_odom_d);
-    return checkLoopConsistent(loop, dist);
+    return checkLoopConsistent(loop, dist); //检测闭环的consistent
   }
 
   /* *******************************************************************************
@@ -567,9 +594,11 @@ class Pcm : public OutlierRemoval {
   /*
    * augment adjacency matrix with an extra (pose-pose) loop closure
    */
-  void incrementAdjMatrix(const ObservationId& id,
-                          const gtsam::BetweenFactor<poseT>& factor) {
-    // * pairwise consistency check (will also compare other loops - if loop
+  void incrementAdjMatrix(const ObservationId& id, //机器人a与机器人a，机器人a与机器人b，机器人a与机器人c...
+                          const gtsam::BetweenFactor<poseT>& factor) { //2种类型
+                                                                       //(1)保存一个机器人nodes之间odom consistent loop factor 
+                                                                       //(2)保存不同机器人nodes之间loop factor                                                           
+    // pairwise consistency check (will also compare other loops - if loop
     // fails we still store it, but not include in the optimization)
     // -- add 1 row and 1 column to lc_adjacency_matrix_;
     // -- populate extra row and column by testing pairwise consistency of new
@@ -583,7 +612,7 @@ class Pcm : public OutlierRemoval {
       Measurements new_measurements;
       loop_closures_[id] = new_measurements;
     }
-    size_t num_lc =
+    size_t num_lc = //关于该ObservationId本次调用时有多少条闭环约束
         loop_closures_[id].factors.size();  // number of loop closures so far,
                                             // including the one we just added
     Eigen::MatrixXd new_adj_matrix = Eigen::MatrixXd::Zero(num_lc, num_lc);
@@ -597,25 +626,27 @@ class Pcm : public OutlierRemoval {
 
       // now iterate through the previous loop closures and fill in last row +
       // col of adjacency
-      for (size_t i = 0; i < num_lc - 1;
-           i++) {  // compare it against all others
+      // 当前的闭环factor与剩余所有的闭环factors依次检测consistent
+      for (size_t i = 0; i < num_lc - 1; i++) {  // compare it against all others; 
         gtsam::BetweenFactor<poseT> factor_i =
             *boost::dynamic_pointer_cast<gtsam::BetweenFactor<poseT>>(
-                loop_closures_[id].factors[i]);
+                loop_closures_[id].factors[i]); //loop_closures_[id].factors[num_lc - 1]是当前factor
         // check consistency
         double mah_distance;
-        bool consistent = areLoopsConsistent(factor_i, factor, &mah_distance);
+        bool consistent = areLoopsConsistent(factor_i, factor, &mah_distance); 
         new_dst_matrix(num_lc - 1, i) = mah_distance;
-        new_dst_matrix(i, num_lc - 1) = mah_distance;
+        new_dst_matrix(i, num_lc - 1) = mah_distance; //与每条检测的闭环计算马氏距离
         if (consistent) {
-          new_adj_matrix(num_lc - 1, i) = 1;
+          new_adj_matrix(num_lc - 1, i) = 1; //与哪条闭环consistent，邻接矩阵的相应位置为1
           new_adj_matrix(i, num_lc - 1) = 1;
         }
       }
     }
-    loop_closures_[id].adj_matrix = new_adj_matrix;
+    loop_closures_[id].adj_matrix = new_adj_matrix; //检查每条闭环与剩余所有的闭环consistent，产生consistent邻接矩阵和对应的马氏距离
     loop_closures_[id].dist_matrix = new_dst_matrix;
   }
+
+
 
   /* *******************************************************************************
    */
@@ -694,51 +725,55 @@ class Pcm : public OutlierRemoval {
     landmarks_[ldmk_key].dist_matrix = new_dst_matrix;
   }
 
+
+
   /* *******************************************************************************
    */
   /*
-   * Based on adjacency matrices, call maxclique to extract inliers
+   * Based on adjacency(邻接矩阵) matrices, call maxclique(最大团) to extract inliers
    */
   void findInliers() {
     if (debug_) log<INFO>("total loop closures registered: %1%") % total_lc_;
     total_good_lc_ = 0;
+
     // iterate through loop closures and find inliers
-    std::unordered_map<ObservationId, Measurements>::iterator it =
-        loop_closures_.begin();
+    std::unordered_map<ObservationId, Measurements>::iterator it = loop_closures_.begin();
     while (it != loop_closures_.end()) {
       std::vector<int> inliers_idx;
       it->second.consistent_factors = gtsam::NonlinearFactorGraph();  // reset
+
       // find max clique
-      size_t num_inliers =
-          findMaxCliqueHeu(it->second.adj_matrix, &inliers_idx);
+      size_t num_inliers = findMaxCliqueHeu(it->second.adj_matrix, &inliers_idx);//TODO: 算法核心找最大团
+
       // update inliers, or consistent factors, according to max clique result
       for (size_t i = 0; i < num_inliers; i++) {
-        it->second.consistent_factors.add(it->second.factors[inliers_idx[i]]);
+        it->second.consistent_factors.add(it->second.factors[inliers_idx[i]]); //找出inlier的闭环factor
       }
       it++;
       total_good_lc_ = total_good_lc_ + num_inliers;
     }
 
+
     // iterate through landmarks and find inliers
-    std::unordered_map<gtsam::Key, Measurements>::iterator it_ldmrk =
-        landmarks_.begin();
+    std::unordered_map<gtsam::Key, Measurements>::iterator it_ldmrk = landmarks_.begin();
     while (it_ldmrk != landmarks_.end()) {
       std::vector<int> inliers_idx;
-      it_ldmrk->second.consistent_factors =
-          gtsam::NonlinearFactorGraph();  // reset
+      it_ldmrk->second.consistent_factors = gtsam::NonlinearFactorGraph();  // reset
+
       // find max clique
-      size_t num_inliers =
-          findMaxCliqueHeu(it_ldmrk->second.adj_matrix, &inliers_idx);
+      size_t num_inliers = findMaxCliqueHeu(it_ldmrk->second.adj_matrix, &inliers_idx);//找出inlier的landmark re-observation
+
       // update inliers, or consistent factors, according to max clique result
       for (size_t i = 0; i < num_inliers; i++) {
-        it_ldmrk->second.consistent_factors.add(
-            it_ldmrk->second.factors[inliers_idx[i]]);
+        it_ldmrk->second.consistent_factors.add(it_ldmrk->second.factors[inliers_idx[i]]);
       }
       it_ldmrk++;
       total_good_lc_ = total_good_lc_ + num_inliers;
     }
     if (debug_) log<INFO>("number of inliers: %1%") % total_good_lc_;
   }
+
+
 
   /* *******************************************************************************
    */
@@ -750,21 +785,19 @@ class Pcm : public OutlierRemoval {
     output_nfg.add(nfg_odom_);               // add the odometry factors
 
     // add the good loop closures
-    std::unordered_map<ObservationId, Measurements>::iterator it =
-        loop_closures_.begin();
+    std::unordered_map<ObservationId, Measurements>::iterator it = loop_closures_.begin();
     while (it != loop_closures_.end()) {
       output_nfg.add(it->second.consistent_factors);
       it++;
     }
     // add the good loop closures associated with landmarks
-    std::unordered_map<gtsam::Key, Measurements>::iterator it_ldmrk =
-        landmarks_.begin();
+    std::unordered_map<gtsam::Key, Measurements>::iterator it_ldmrk = landmarks_.begin();
     while (it_ldmrk != landmarks_.end()) {
       output_nfg.add(it_ldmrk->second.consistent_factors);
       it_ldmrk++;
     }
-    output_nfg.add(
-        nfg_special_);  // still need to update the class overall factorgraph
+
+    output_nfg.add(nfg_special_);  // still need to update the class overall factorgraph
     return output_nfg;
   }
 };
